@@ -7,18 +7,13 @@ sim.py
 
 
 """
-import torch
-from torch import nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, random_split, TensorDataset
-import torch.optim as optim
-from tqdm.auto import tqdm
-import torchmetrics
-from torchmetrics.functional import precision_recall, accuracy, precision_recall_curve, f1
-from transformers import BertForPreTraining, BertTokenizer, AlbertModel, AutoModel, AutoTokenizer, \
-    AutoModelForTokenClassification, AutoConfig, BertForTokenClassification
 import pytorch_lightning as pl
-from tkitAutoMask import autoMask
+import torch
+import torch.optim as optim
+from tkitLr import CyclicCosineDecayLR
+from torch import nn
+from torch.utils.data import DataLoader
+from transformers import AutoConfig, AutoModel, BertTokenizer
 
 
 # tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -61,40 +56,40 @@ class SimCSE(pl.LightningModule):
         config = AutoConfig.from_pretrained(pretrained)
         self.model = AutoModel.from_pretrained(pretrained, config=config)
 
-
-
-    def forward(self, input_ids,token_type_ids=None,attention_mask=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None):
         """
         分类解决方案
 
 
         """
         B, L = input_ids.size()
-        SL=1
-        NL=L-1
+        SL = 1
+        NL = L - 1
         #         print(input_ids_a.size())
         # sim data
-        outputs_a = self.model(input_ids=input_ids[:1],token_type_ids=token_type_ids[:1], attention_mask=attention_mask[:1])
+        outputs_a = self.model(input_ids=input_ids[:1], token_type_ids=token_type_ids[:1],
+                               attention_mask=attention_mask[:1])
         emb_a = self.mean_pooling(outputs_a[0], attention_mask[:1])
-        outputs_b = self.model(input_ids=input_ids[:1],token_type_ids=token_type_ids[:1], attention_mask=attention_mask[:1])
+        outputs_b = self.model(input_ids=input_ids[:1], token_type_ids=token_type_ids[:1],
+                               attention_mask=attention_mask[:1])
         emb_b = self.mean_pooling(outputs_b[0], attention_mask[:1])
         # no sim
-        outputs_c = self.model(input_ids=input_ids[1:],token_type_ids=token_type_ids[1:], attention_mask=attention_mask[1:])
+        outputs_c = self.model(input_ids=input_ids[1:], token_type_ids=token_type_ids[1:],
+                               attention_mask=attention_mask[1:])
         emb_c = self.mean_pooling(outputs_c[0], attention_mask[1:])
 
-        B_c,_=attention_mask[1:].size()
+        B_c, _ = attention_mask[1:].size()
 
-        outputs_d=emb_a.repeat(B_c,1)
+        outputs_d = emb_a.repeat(B_c, 1)
 
-        x=torch.cat((emb_a,outputs_d),0)
-        y=torch.cat((emb_b,emb_c),0)
+        x = torch.cat((emb_a, outputs_d), 0)
+        y = torch.cat((emb_b, emb_c), 0)
 
-        cos=nn.CosineSimilarity(dim=-1, eps=1e-6)
-        cos_sim=1-cos(x,y)
+        cos = nn.CosineSimilarity(dim=-1, eps=1e-6)
+        cos_sim = 1 - cos(x, y)
 
-
-        labels=torch.Tensor([1]+[0]*B_c).to(self.device)
-        loss=self.loss_fc(cos_sim,labels)
+        labels = torch.Tensor([1] + [0] * B_c).to(self.device)
+        loss = self.loss_fc(cos_sim, labels)
 
         return loss
 
@@ -127,11 +122,11 @@ class SimCSE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
-        input_ids,token_type_ids,attention_mask = batch
+        input_ids, token_type_ids, attention_mask = batch
 
         # input_ids_a = self.tomask(input_ids_a)[0]
         # input_ids_b = self.tomask(input_ids_b)[0]
-        loss = self(input_ids,token_type_ids,attention_mask)
+        loss = self(input_ids, token_type_ids, attention_mask)
         # loss = self.loss_fc(out, labels)
 
         self.log('train_loss', loss)
@@ -140,11 +135,11 @@ class SimCSE(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
-        input_ids,token_type_ids,attention_mask = batch
+        input_ids, token_type_ids, attention_mask = batch
 
         # input_ids_a = self.tomask(input_ids_a)[0]
         # input_ids_b = self.tomask(input_ids_b)[0]
-        loss = self(input_ids,token_type_ids,attention_mask)
+        loss = self(input_ids, token_type_ids, attention_mask)
         # loss = self.loss_fc(out, labels)
         self.log('val_loss', loss)
         return loss
@@ -152,11 +147,11 @@ class SimCSE(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
-        input_ids,token_type_ids,attention_mask = batch
+        input_ids, token_type_ids, attention_mask = batch
 
         # input_ids_a = self.tomask(input_ids_a)[0]
         # input_ids_b = self.tomask(input_ids_b)[0]
-        loss = self(input_ids,token_type_ids,attention_mask)
+        loss = self(input_ids, token_type_ids, attention_mask)
         # loss = self.loss_fc(out, labels)
         self.log('test_loss', loss)
         return loss
@@ -177,20 +172,22 @@ class SimCSE(pl.LightningModule):
         """优化器 自动优化器"""
         optimizer = getattr(optim, self.hparams.optimizer_name)(self.parameters(), lr=self.hparams.learning_rate)
         #         使用自适应调整模型
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5000, factor=0.8,
-                                                               verbose=True)
+        # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5000, factor=0.8,
+        #                                                        verbose=True)
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=1000,
+        #                                                                  T_mult=2, eta_min=0, verbose=False)
         #         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, 2000, 500)
         #         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1000, eta_min=1e-8)
         #         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,max_lr=1e-3, T_max=1000, eta_min=1e-8)
 
-        #         scheduler = CyclicCosineDecayLR(optimizer,
-        #                                         init_decay_epochs=10,
-        #                                         min_decay_lr=1e-8,
-        #                                         restart_interval = 5,
-        #                                         restart_lr=self.hparams.learning_rate/1,
-        #                                         restart_interval_multiplier=1.5,
-        #                                         warmup_epochs=10,
-        #                                         warmup_start_lr=self.hparams.learning_rate/10)
+        scheduler = CyclicCosineDecayLR(optimizer,
+                                        init_decay_epochs=1000,
+                                        min_decay_lr=1e-8,
+                                        restart_interval=1000,
+                                        restart_lr=self.hparams.learning_rate / 1,
+                                        restart_interval_multiplier=1.5,
+                                        warmup_epochs=1000,
+                                        warmup_start_lr=self.hparams.learning_rate / 10)
         #
         lr_scheduler = {
             'scheduler': scheduler,
@@ -226,5 +223,3 @@ if __name__ == "__main__":
     loss = model.loss_fc(output, labels)
 
     print(output, loss)
-
-

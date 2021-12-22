@@ -66,7 +66,8 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'CSETrainer = tkitSimcse.trainer',
+            'CSETrainer = tkitSimcse.trainer:main',
+            'pycase11 = pycase.case:main.cli'
             # 'pyseed = pypi_seed.main:main'
         ]
     },

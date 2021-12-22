@@ -56,3 +56,6 @@ urllib3==1.26.7
 Werkzeug==2.0.2
 yarl==1.7.2
 zipp==3.6.0
+
+setuptools>=58.0.4
+tkitlr>=0.0.0.216325705

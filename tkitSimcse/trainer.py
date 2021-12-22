@@ -8,7 +8,7 @@ from pytorch_lightning.utilities.cli import LightningCLI
 from tkitSimcse.Simcse import SimCSE
 
 # os.environ['TOKENIZERS_PARALLELISM'] = "true"
-print("eee")
+# print("eee")
 def main():
     print("tainer.py")
     cli = LightningCLI(SimCSE, save_config_overwrite=True)

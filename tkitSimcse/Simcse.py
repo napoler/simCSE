@@ -73,6 +73,8 @@ class SimCSE(pl.LightningModule):
         outputs_b = self.model(input_ids=input_ids[:1], token_type_ids=token_type_ids[:1],
                                attention_mask=attention_mask[:1])
         emb_b = self.mean_pooling(outputs_b[0], attention_mask[:1])
+
+
         # no sim
         outputs_c = self.model(input_ids=input_ids[1:], token_type_ids=token_type_ids[1:],
                                attention_mask=attention_mask[1:])
@@ -85,12 +87,13 @@ class SimCSE(pl.LightningModule):
         x = torch.cat((emb_a, outputs_d), 0)
         y = torch.cat((emb_b, emb_c), 0)
 
-        cos = nn.CosineSimilarity(dim=-1, eps=1e-6)
-        cos_sim = 1 - cos(x, y)
+        cos = nn.CosineSimilarity(dim=-1, eps=1e-10)
+        # cos_sim = 1 - cos(x, y)
 
-        labels = torch.Tensor([1] + [0] * B_c).to(self.device)
+        cos_sim = cos(x, y)
+        labels = torch.Tensor([1] + [-1] * B_c).to(self.device)
         loss = self.loss_fc(cos_sim, labels)
-
+        print(cos_sim,labels)
         return loss
 
     def mean_pooling(self, model_output, attention_mask):

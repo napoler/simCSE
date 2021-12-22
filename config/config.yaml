@@ -62,14 +62,14 @@ trainer:
   stochastic_weight_avg: false
   terminate_on_nan: null
 model:
-  learning_rate: 0.0003
+  learning_rate: 0.00005
   T_max: 5
   ignore_index: 0
   optimizer_name: AdamW
   dropout: 0.2
   labels: 2
   pretrained: uer/chinese_roberta_L-2_H-128
-  batch_size: 2
+  batch_size: 8
   trainfile: ./data/train.pkt
   valfile: ./data/val.pkt
   testfile: ./data/test.pkt

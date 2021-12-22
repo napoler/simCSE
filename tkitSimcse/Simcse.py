@@ -31,7 +31,7 @@ from tkitAutoMask import autoMask
 # logits = outputs.logits
 
 
-class simCse(pl.LightningModule):
+class SimCSE(pl.LightningModule):
     """
     用于处理两个序列相关度的模型
 
@@ -45,7 +45,7 @@ class simCse(pl.LightningModule):
     def __init__(
             self, learning_rate=3e-4,
             T_max=5,
-            ignore_index=0, max_len=256,
+            ignore_index=0,
             optimizer_name="AdamW",
             dropout=0.2,
             labels=2,
@@ -60,24 +60,8 @@ class simCse(pl.LightningModule):
         self.tokenizer = BertTokenizer.from_pretrained(pretrained)
         config = AutoConfig.from_pretrained(pretrained)
         self.model = AutoModel.from_pretrained(pretrained, config=config)
-        #         self.rnn = nn.GRU(config.hidden_size, config.hidden_size,dropout=dropout,num_layers=2,bidirectional=True)
-        # self.rnn = nn.LSTM(config.hidden_size, config.hidden_size, dropout=dropout, num_layers=2, bidirectional=True)
-        self.pre_classifier = nn.Linear(config.hidden_size * 6, config.hidden_size)
-        self.dropout = torch.nn.Dropout(dropout)
-        self.classifier = torch.nn.Linear(config.hidden_size, 1)
-        self.classifierSigmoid = torch.nn.Sigmoid()
 
-        self.tomask = autoMask(
-            # transformer,
-            mask_token_id=self.tokenizer.mask_token_id,  # the token id reserved for masking
-            pad_token_id=self.tokenizer.pad_token_id,  # the token id for padding
-            mask_prob=0.05,  # masking probability for masked language modeling
-            replace_prob=0.90,
-            # ~10% probability that token will not be masked, but included in loss, as detailed in the epaper
-            mask_ignore_token_ids=[self.tokenizer.cls_token_id, self.tokenizer.eos_token_id]
-            # other tokens to exclude from masking, include the [cls] and [sep] here
-        )
-        # self
+
 
     def forward(self, input_ids,token_type_ids=None,attention_mask=None):
         """
@@ -91,46 +75,32 @@ class simCse(pl.LightningModule):
         #         print(input_ids_a.size())
         # sim data
         outputs_a = self.model(input_ids=input_ids[:1],token_type_ids=token_type_ids[:1], attention_mask=attention_mask[:1])
-        emb_a = self.mean_pooling(outputs_a, attention_mask[:1])
+        emb_a = self.mean_pooling(outputs_a[0], attention_mask[:1])
         outputs_b = self.model(input_ids=input_ids[:1],token_type_ids=token_type_ids[:1], attention_mask=attention_mask[:1])
-        emb_b = self.mean_pooling(outputs_b, attention_mask[:1])
+        emb_b = self.mean_pooling(outputs_b[0], attention_mask[:1])
         # no sim
         outputs_c = self.model(input_ids=input_ids[1:],token_type_ids=token_type_ids[1:], attention_mask=attention_mask[1:])
-        emb_c = self.mean_pooling(outputs_c, attention_mask[1:])
+        emb_c = self.mean_pooling(outputs_c[0], attention_mask[1:])
 
         B_c,_=attention_mask[1:].size()
 
         outputs_d=emb_a.repeat(B_c,1)
 
         x=torch.cat((emb_a,outputs_d),0)
-        y=torch.cat((emb_b,outputs_c),0)
+        y=torch.cat((emb_b,emb_c),0)
 
-        cos=nn.cosine_similarity(dim=-1)
-        cos_sim=cos(x,y)
+        cos=nn.CosineSimilarity(dim=-1, eps=1e-6)
+        cos_sim=1-cos(x,y)
 
-        loss_fc=nn.BCEWithLogitsLoss()
+
         labels=torch.Tensor([1]+[0]*B_c).to(self.device)
-        loss=loss_fc(cos_sim,labels)
-        #
-        #
-        #
-        #
-        #
-        #
-        #
-        # emb = torch.cat((emb_a, emb_b, emb_diff.abs()), -1)
-        # pooler = self.pre_classifier(emb)
-        # #         cos = nn.CosineSimilarity(dim=1, eps=1e-8)
-        # #         sim=cos(emb_a, emb_b)
-        #
-        # pooler = torch.nn.ReLU()(pooler)
-        # pooler = self.dropout(pooler)
-        # output = self.classifier(pooler)
-        # output = self.classifierSigmoid(output)
+        loss=self.loss_fc(cos_sim,labels)
+
         return loss
 
     def mean_pooling(self, model_output, attention_mask):
         token_embeddings = model_output  # First element of model_output contains all token embeddings
+        # print("token_embeddings",token_embeddings)
         input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
         return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 

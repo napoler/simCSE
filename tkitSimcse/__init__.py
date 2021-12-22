@@ -6,6 +6,6 @@ Blog: https://terrychan.org
 
 """
 import os
-
+from .Simcse import *
 if __name__ == '__main__':
     pass

@@ -68,8 +68,9 @@ model:
   optimizer_name: AdamW
   dropout: 0.2
   labels: 2
-  pretrained: uer/chinese_roberta_L-2_H-128
-  batch_size: 8
+#  pretrained: uer/chinese_roberta_L-2_H-128
+  pretrained: uer/chinese_roberta_L-4_H-512
+  batch_size: 6
   trainfile: ./data/train.pkt
   valfile: ./data/val.pkt
   testfile: ./data/test.pkt

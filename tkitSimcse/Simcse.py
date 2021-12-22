@@ -91,7 +91,7 @@ class SimCSE(pl.LightningModule):
         # cos_sim = 1 - cos(x, y)
 
         cos_sim = cos(x, y)
-        labels = torch.Tensor([1] + [-1] * B_c).to(self.device)
+        labels = torch.Tensor([1] + [0] * B_c).to(self.device)
         loss = self.loss_fc(cos_sim, labels)
         print(cos_sim,labels)
         return loss

@@ -7,5 +7,6 @@ Blog: https://terrychan.org
 """
 import os
 from .Simcse import *
+from .trainer import *
 if __name__ == '__main__':
     pass
